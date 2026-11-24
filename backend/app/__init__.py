@@ -1,0 +1,1 @@
+"""Local PDF Image Extractor."""

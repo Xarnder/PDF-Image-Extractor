@@ -1,0 +1,9 @@
+[project]
+name = "pdf-image-extractor"
+version = "1.0.0"
+description = "Private, local PDF photograph extraction and review"
+requires-python = ">=3.12,<3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore:builtin type.*:DeprecationWarning"]
