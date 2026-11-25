@@ -18,6 +18,8 @@ def placements(page, settings):
             continue
         source = {'xref': info['xref'], 'width': info['width'], 'height': info['height'], 'transform': list(matrix), 'bbox': bbox,
                   'mask': bool(info.get('has-mask', False)), 'encoding': None, 'safe': False}
+        if not info['xref']:
+            source['page'] = page.number
         # get_image_info doesn't expose soft mask xrefs in all supported versions.
         if info['xref']:
             for item in page.get_images(full=True):
@@ -34,8 +36,19 @@ def source_image(doc, source, max_pixels):
         raise ValueError('Embedded image exceeds the configured pixel limit.')
     xref = source['xref']
     if not xref:
-        raise ValueError('Inline image requires page rendering.')
-    payload = doc.extract_image(xref)
+        # Inspect the actual inline object, not a render of unrelated photographs
+        # behind a transparent mask or a mostly off-page decorative placement.
+        page=doc[source['page']]
+        payload=None
+        for block in page.get_text('dict',clip=fitz.INFINITE_RECT())['blocks']:
+            if block['type']!=1 or (block['width'],block['height'])!=(source['width'],source['height']):
+                continue
+            bbox=list(fitz.Rect(block['bbox'])*page.rotation_matrix)
+            if all(abs(a-b)<.1 for a,b in zip(bbox,source['bbox'])):
+                payload=block
+                break
+    else:
+        payload = doc.extract_image(xref)
     if not payload:
         raise ValueError('Image encoding cannot be decoded.')
     im = Image.open(io.BytesIO(payload['image']))

@@ -53,7 +53,11 @@ class IsolatedWorker:
             if not self.process.is_alive():
                 self.close()
                 raise RuntimeError('PDF worker exited unexpectedly; retry this page.')
-            rss=psutil.Process(self.process.pid).memory_info().rss / 1024**2
+            root=psutil.Process(self.process.pid)
+            try:
+                rss=sum(p.memory_info().rss for p in [root,*root.children(recursive=True)] if p.is_running()) / 1024**2
+            except psutil.NoSuchProcess:
+                continue
             self.peak_mb=max(self.peak_mb,rss)
             if rss > memory_mb or time.monotonic()-start > timeout:
                 self.close()
@@ -66,11 +70,24 @@ class IsolatedWorker:
     def close(self):
         if self.process:
             if self.process.is_alive():
+                # Native content helpers are part of the same resource/cancellation boundary.
+                try: children=psutil.Process(self.process.pid).children(recursive=True)
+                except psutil.Error: children=[]
+                for child in reversed(children):
+                    try: child.terminate()
+                    except psutil.Error: pass
                 self.process.terminate()
                 self.process.join(3)
                 if self.process.is_alive():
                     self.process.kill()
                     self.process.join()
+                for child in children:
+                    try:
+                        child.wait(timeout=1)
+                    except psutil.TimeoutExpired:
+                        try: child.kill()
+                        except psutil.Error: pass
+                    except psutil.Error: pass
             self.process.close()
             self.process=None
         if hasattr(self,'pipe'):

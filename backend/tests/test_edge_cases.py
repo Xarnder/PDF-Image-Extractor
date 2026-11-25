@@ -52,7 +52,7 @@ def test_full_page_and_decorative_graphic(tmp_path):
     path=tmp_path/'graphics.pdf';doc.save(path);doc.close()
     regions=run(path)
     graphic_regions=[r for r in regions if r['bbox'][1]<250]
-    assert graphic_regions and all(r['status']=='review' for r in graphic_regions)
+    assert graphic_regions and all(r['status']=='rejected' for r in graphic_regions)
     doc=fitz.open();page=doc.new_page(width=600,height=800);page.insert_image(page.rect,stream=photograph(),keep_proportion=False)
     path=tmp_path/'full.pdf';doc.save(path);doc.close()
     regions=run(path)

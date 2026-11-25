@@ -22,6 +22,7 @@ from app.jobs.manager import manager
 from app.jobs.worker import IsolatedWorker
 from app.services import edits, exports
 from app.extraction.ai_detector import model_status
+from app.extraction.content_analysis import status as content_analysis_status
 
 TOKEN=secrets.token_urlsafe(32)
 io_worker=IsolatedWorker()
@@ -92,7 +93,7 @@ def health(): return {'ok':True,'version':'1.0.0'}
 def session():
     return {'token':TOKEN,'settings':store.settings().model_dump(),'models':[model_status()],
             'engines':['Native PDF','OpenCV'],'platform':platform.machine(),'worker_peak_mb':round(manager.peak_mb,1),
-            'data_directory':str(DATA)}
+            'data_directory':str(DATA),'content_analysis':content_analysis_status()}
 
 
 @app.put('/api/settings')
@@ -213,7 +214,7 @@ async def events(job_id:str,request:Request):
 def pages(job_id:str):
     store.raw_job(job_id)
     with store.connection() as c:
-        rows=c.execute('''SELECT p.*,count(r.id) AS photographs,
+        rows=c.execute('''SELECT p.*,sum(CASE WHEN r.status IN ('accepted','review') THEN 1 ELSE 0 END) AS photographs,
                        sum(CASE WHEN r.status='review' THEN 1 ELSE 0 END) AS review
                        FROM pages p LEFT JOIN regions r ON r.job_id=p.job_id AND r.page=p.number
                        WHERE p.job_id=? GROUP BY p.number ORDER BY p.number''',(job_id,)).fetchall()
@@ -233,7 +234,8 @@ async def page_preview(job_id:str,number:int,thumb:bool=False):
 @app.get('/api/jobs/{job_id}/regions')
 def get_regions(job_id:str,page:int | None=None,status:str | None=None,offset:int=0,limit:int=60,sort:str='page'):
     items=store.regions(job_id,page)
-    if status and status!='all': items=[r for r in items if r['status']==status]
+    if status=='active': items=[r for r in items if r['status']!='rejected']
+    elif status and status!='all': items=[r for r in items if r['status']==status]
     if sort=='resolution': items.sort(key=lambda r:r['dimensions'][0]*r['dimensions'][1],reverse=True)
     if sort=='confidence': items.sort(key=lambda r:r['confidence'] or 0)
     limit=min(500,max(1,limit)); offset=max(0,offset)
@@ -293,7 +295,7 @@ def download_export(export_id:str):
 
 
 @app.get('/api/models')
-def models(): return {'models':[model_status()],'download':model_download}
+def models(): return {'models':[model_status()],'download':model_download,'content_analysis':content_analysis_status()}
 
 
 @app.post('/api/models/heron/download')

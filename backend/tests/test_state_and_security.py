@@ -58,6 +58,11 @@ def test_processing_edits_history_and_export(client,tmp_path):
     response=client.post(f'/api/jobs/{jid}/edits',json={'changes':[{'id':r['id'],'bbox':changed,'revision':0,'status':'rejected'}]})
     assert response.status_code==200,response.text
     assert response.json()[0]['manual']
+    active=client.get(f'/api/jobs/{jid}/regions',params={'status':'active'}).json()
+    assert all(x['status']!='rejected' for x in active['items'])
+    assert active['total']==sum(x['status']!='rejected' for x in store.regions(jid))
+    page_counts=client.get(f'/api/jobs/{jid}/pages').json()
+    assert sum(p['photographs'] for p in page_counts)==active['total']
     assert client.post(f'/api/jobs/{jid}/edits',json={'changes':[{'id':r['id'],'bbox':[0,0,900,900]}]}).status_code==400
     assert client.post(f'/api/jobs/{jid}/edits',json={'changes':[{'id':r['id'],'bbox':changed,'revision':0}]}).status_code==400
     assert client.post(f'/api/jobs/{jid}/history',json={'redo':False}).json()['changed']

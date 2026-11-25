@@ -4,7 +4,7 @@ A private, local PDF photograph extraction and review application for macOS on A
 
 Extract individual photographs from photography books, portfolios, magazines, catalogues, and scanned or flattened PDFs. Recover embedded source pixels when available, review uncertain detections, adjust crops, and export separate image files with an extraction report.
 
-**Validated baseline:** macOS on Apple Silicon, Python 3.12, Svelte 5, native PDF extraction and OpenCV. The application runs without AI models. Windows launchers are included but have not been exercised on a native Windows host. Real-book detection accuracy has not been established; the measured benchmark uses generated fixtures.
+**Validated baseline:** macOS on Apple Silicon, Python 3.12, Svelte 5, native PDF extraction and OpenCV. The application runs without AI models. Windows launchers are included but have not been exercised on a native Windows host. Balanced mode has also been retested on a supplied 174-page photography book. See the validation report for its measured results and limits; no general precision/recall claim is made.
 
 ## Contents
 
@@ -236,9 +236,25 @@ PDF_EXTRACTOR_DATA="$HOME/PDF-Extractor-Data" ./start.sh
 
 Stop the application before making backups of the data directory. Keep its document files and SQLite state together. Jobs contain absolute paths, so moving only the database to another machine does not migrate their PDFs. Import documents afresh when changing computers. The data, caches, dependencies, model weights, logs, and generated benchmark files are excluded from Git.
 
+## Balanced photograph protection
+
+Balanced and Maximum preserve native image boundaries. A foreground silhouette or face is not enough to trim or split an embedded photograph. Splitting a flattened composite requires multiple independent rectangular boundaries; a proposed split that cuts through or omits a detected face is discarded. Ambiguous photographs with faces stay intact for review, including their body and background. Photos without detectable faces remain eligible.
+
+On macOS, setup compiles `native/vision.swift` using the installed Swift compiler. This enables **offline Apple Vision** face detection, OCR geometry and content labels. Combined with PDF text geometry, these checks reject text, logos, promotional layouts, book mockups and illustrations. Faces printed inside a book mockup do not override book-layout evidence. No face identification is performed and recognized text strings are not stored.
+
+For an existing installation, build the helper once, then restart and import the PDF as a new Balanced job:
+
+```sh
+.venv/bin/python scripts/build_vision.py
+```
+
+**Settings → Processing** controls face priority and local content analysis. **Settings → AI models** shows which content backend is available. The normal gallery excludes rejected candidates; choose **Rejected** or **All candidates** to inspect or restore them. Choose **Photographs + review** to export both groups together without rejected items. Rejected items are excluded from normal exports, but can be explicitly included. Existing jobs keep their saved results until re-detected or re-imported.
+
+Windows/Linux and Macs without the compiled helper retain native-boundary protection, PDF text/graphic checks and OpenCV frontal-face detection. They do not have Apple Vision's semantic book/mockup and OCR checks, so their filtering is less capable. Helper failure falls back locally and adds a processing notice. Automatic decisions remain recoverable and should be reviewed for important work.
+
 ## Optional Heron layout engine
 
-The base installation does **not** include PyTorch or model weights. No AI or GPU processing is claimed in the installed baseline. Heron uses the official Docling model through its documented Transformers inference API without loading Docling's OCR/table pipeline.
+The base installation does **not** include PyTorch or downloaded model weights. On macOS, the separate Apple Vision helper uses the operating system’s local models; its availability is reported in Settings. Heron hardware acceleration is optional. Heron uses the official Docling model through its documented Transformers inference API without loading Docling's OCR/table pipeline.
 
 ```sh
 ./scripts/install-ai.sh
@@ -246,7 +262,7 @@ The base installation does **not** include PyTorch or model weights. No AI or GP
 
 This explicitly installs the optional runtime; it does not fetch model weights. Restart, open **Settings → AI models**, and choose **Download Heron (~173 MB)**. The model revision is resolved and recorded during that explicit download. Enable it for new Balanced/Maximum jobs. Subsequent inference uses `local_files_only=True` with Hugging Face offline mode and telemetry disabled. Device selection checks MPS/CUDA availability and falls back to CPU on model/device errors; a model failure is surfaced in job notices while core detection continues.
 
-The adapter and fallback paths have automated tests, but **real Heron inference and MPS performance were not validated in this checkout**, because no optional runtime or weights were installed. The UI distinguishes dependency presence from installed weights. DocLayout-YOLO, PP-DocLayoutV3, Apple Vision and CLIP/SigLIP classification are explicitly not integrated. They can be added behind the detector interface after independent compatibility and accuracy testing.
+The adapter and fallback paths have automated tests, but **real Heron inference and MPS performance were not validated in this checkout**, because no optional runtime or weights were installed. The UI distinguishes dependency presence from installed weights. DocLayout-YOLO, PP-DocLayoutV3 and CLIP/SigLIP classification are explicitly not integrated. They can be added behind the detector interface after independent compatibility and accuracy testing.
 
 Official references and dependency decisions are in [docs/architecture.md](docs/architecture.md).
 
@@ -302,6 +318,7 @@ PDF-Image-Extractor/
 │   ├── src/                     Svelte 5, TypeScript, CSS, and coordinate tests
 │   ├── package.json
 │   └── package-lock.json
+├── native/                      Offline macOS Vision helper source
 ├── scripts/                     Setup, launch, diagnosis, and optional AI setup
 ├── tests/                       Synthetic PDF fixtures and stress benchmark
 ├── docs/                        Architecture, validation, measured benchmark
@@ -325,10 +342,14 @@ This is a local single-user application. Do not expose its port through a public
 
 Latest recorded checks on the development Mac:
 
-- **33 backend tests passed**, covering native/flattened extraction, crop geometry, masks, clipping, image rotation/color spaces, metadata, duplicate hashes, exports, persistence, worker recovery, security, and launcher helper behavior.
+- **43 backend tests passed**, covering native/flattened extraction, crop geometry, masks, clipping, image rotation/color spaces, metadata, duplicate hashes, exports, persistence, worker recovery, security, and launcher helper behavior.
 - **8 frontend tests passed**, checking coordinate mapping at different zoom levels, panning, and reverse crop drawing.
 - **0 Svelte/TypeScript errors or warnings**, with a successful production build.
 - Chrome exercised import, real processing, page review, crop splitting, undo, and keyboard acceptance. Additional editing, export, theme, and accessibility checks were performed in the in-app browser.
+
+### Supplied photography-book retest
+
+The corrected Balanced run processed all **174 pages with no failures**: **194 accepted**, **190 for review**, and **104 rejected** candidates. All **384 exported PNGs** passed file/dimension checks, and 195 encoded passthrough outputs matched source bytes. Previously split studio photographs remain whole; the audited text, logos and book mockups are excluded. Classification is local on this Mac and still requires review of uncertain cases. See [the real-document findings](docs/validation.md#real-174-page-photography-book-retest).
 
 ### Synthetic 174-page benchmark
 
@@ -342,16 +363,16 @@ The benchmark contains seven layouts, alternating native and flattened test imag
 | Precision / recall on this fixture | 1.000 / 1.000 |
 | Mean bounding-box IoU | 0.99946 |
 | Maximum matched edge error | 0.420 PDF points |
-| Processing time, including forced restart | 49.18 seconds |
-| Throughput | 3.54 pages/second |
-| Peak sampled server + worker RSS | 1035.7 MB |
-| Health API latency, 95th percentile | 1.45 ms |
+| Processing time, including forced restart | 118.64 seconds |
+| Throughput | 1.47 pages/second |
+| Peak sampled server + worker RSS | 1091.3 MB |
+| Health API latency, 95th percentile | 10.48 ms |
 | Valid individual PNG exports | 425 |
-| Export time | 25.45 seconds |
+| Export time | 27.05 seconds |
 
-The server was forcibly terminated after 14 completed pages and successfully resumed from its checkpoint. Every exported image was opened and verified. The run used one document worker with optional AI disabled. Memory figures exclude the browser and fixture generator.
+The server was forcibly terminated after 12 completed pages and successfully resumed from its checkpoint. Every exported image was opened and verified. The run used one document worker with Heron disabled and local Apple Vision content checks enabled. Memory figures include native analysis helpers and exclude the browser and fixture generator. This run overlapped the real-book validation. Geometry counts include rejected synthetic artwork; they do not measure semantic classification accuracy.
 
-**These figures measure only the synthetic fixture. They are not real-world accuracy guarantees.** No actual 174-page book was provided or validated. See the full [validation report](docs/validation.md) and machine-readable [benchmark results](docs/benchmark.json).
+**These figures measure only the synthetic fixture. They are not real-world accuracy guarantees.** A separate supplied 174-page photography book was also tested; its results are recorded in the validation report. See the full [validation report](docs/validation.md) and machine-readable [benchmark results](docs/benchmark.json).
 
 ### Run the checks
 
@@ -385,14 +406,14 @@ The repository includes lockfiles for Python and npm. Add optional engines behin
 
 ## Known limitations
 
-- Traditional visual analysis cannot reliably classify all illustrations, book mockups, advertisements, or low-detail photographs. Uncertain candidates remain recoverable in review. A textured illustration can still look photographic to the heuristic classifier. Inspect outputs for important work.
+- Content analysis is probabilistic. Apple Vision is available only on macOS with the compiled helper; portable checks are less capable. Book mockups, printed faces, illustrations and unusual layouts can still be ambiguous. Rejected items remain recoverable and uncertain faces keep their enclosing photograph for review.
 - Flattened photographs with white interiors, invisible borders, textured backgrounds, overlapping images, or no gutters may require manual correction. Native image boundaries preserve photographic white backgrounds; the same information does not exist in a flattened scan.
 - Orthogonal native placements support source cropping, rotation and mirroring. Single-source rectangular clipping is handled directly when verified. Complex clipping paths, opacity, masks, skew and overlapping paint use rendering; their proposed rectangular boundaries may need review. Preview comparison is conservative but cannot prove equality of sub-preview-pixel content.
-- Crop editing is rectangular. Polygon editing, OCR, automatic semantic photograph classification and automatic content enhancement are not implemented.
+- Crop editing is rectangular. Polygon editing, OCR text export and automatic content enhancement are not implemented. OCR is used only as local classification evidence when Apple Vision is available.
 - A target render larger than the configured pixel cap is reduced to stay bounded. An oversized source is flagged for rendering/review; explicit full-source export refuses it rather than exhausting memory.
 - Original encoded bytes can only pass through when metadata stripping does not require a rewrite. PNG/JPEG conversion handles RGB, CMYK, grayscale and alpha; unusual or damaged profiles fall back to Pillow conversion. This is not a colour-proofing workflow.
 - This is an unpackaged local application, not a signed/notarized macOS app. The shell launcher is macOS/Linux-specific. Windows has a separate bootstrap/launcher, but still needs native Windows execution and dependency-lock validation.
-- The supplied screenshot is an illustrative UI reference, not the actual 174-page PDF or a photographic detection fixture. No successful real-book accuracy claim is made.
+- The supplied screenshot is an illustrative UI reference. The real-book retest covers one publication and is not a general accuracy guarantee.
 
 ## Troubleshooting
 

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from app.core.config import ROOT, DATA
 from app.extraction.ai_detector import model_status
+from app.extraction.content_analysis import status as content_analysis_status
 
 print('PDF Image Extractor installation check')
 print(f'Python: {platform.python_version()} | {platform.system()} {platform.release()} | {platform.machine()}')
@@ -20,8 +21,9 @@ print(f'Frontend: {"built" if (ROOT / "frontend/dist/index.html").exists() else 
 print(f'Data directory: {DATA}')
 status=model_status()
 print(f'Heron: {"available" if status["available"] else "not installed (optional)"}')
+print(f'Content analysis: {content_analysis_status()["name"]} | offline face priority')
 try:
     import torch
     print(f'MPS available: {torch.backends.mps.is_available()} | CUDA available: {torch.cuda.is_available()}')
 except ImportError:
-    print('PyTorch not installed. Core processing uses CPU; no AI or GPU is claimed.')
+    print('PyTorch not installed. Heron and MPS/CUDA acceleration are unavailable; local content-analysis status is shown above.')

@@ -54,7 +54,11 @@ def main():
         while True:
             t=time.perf_counter();health=client.get('/api/health');latencies.append((time.perf_counter()-t)*1000);health.raise_for_status()
             procs=[psutil.Process(server.pid),*psutil.Process(server.pid).children(recursive=True)]
-            peak=max(peak,sum(p.memory_info().rss for p in procs if p.is_running())/1024**2)
+            rss=0
+            for process in procs:
+                try: rss+=process.memory_info().rss
+                except psutil.NoSuchProcess: pass  # Short-lived native analysis helpers.
+            peak=max(peak,rss/1024**2)
             job=client.get(f'/api/jobs/{jid}').json()
             if not interrupted and job['processed']>=12:
                 checkpoint=job['processed']

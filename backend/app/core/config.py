@@ -28,6 +28,8 @@ class Settings(BaseModel):
     refinement: float = Field(0.5, ge=0, le=1)
     ai_threshold: float = Field(0.5, ge=0.1, le=0.95)
     ai_enabled: bool = False
+    content_analysis: bool = True
+    face_priority: bool = True
     ai_resolution: int = Field(1024, ge=512, le=2048)
     device: Literal['auto', 'cpu', 'mps', 'cuda'] = 'auto'
     duplicate_distance: int = Field(6, ge=0, le=20)

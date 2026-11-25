@@ -14,6 +14,7 @@ node -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<22||(a==
 "$PYTHON_BIN" -c 'import shutil; assert shutil.disk_usage(".").free > 2*1024**3, "At least 2 GB free disk space is required"'
 if [ ! -x .venv/bin/python ]; then "$PYTHON_BIN" -m venv .venv; fi
 .venv/bin/python -m pip install -r backend/requirements.lock
+.venv/bin/python scripts/build_vision.py
 cd frontend
 npm ci --legacy-peer-deps
 npm run check
